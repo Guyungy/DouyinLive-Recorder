@@ -4,7 +4,7 @@
 Author: Hmily
 GitHub: https://github.com/ihmily
 Date: 2023-07-17 23:52:05
-Update: 2024-03-11 00:42:11
+Update: 2024-04-12 18:54:27
 Copyright (c) 2023-2024 by Hmily, All Rights Reserved.
 Function: Record live stream video.
 """
@@ -333,7 +333,7 @@ def get_tiktok_stream_url(json_data: dict, video_quality: str) -> dict:
     }
 
     if status == 2:
-        stream_data = live_room.get('liveRoom', {}).get('streamData', {}).get('pull_data', {}).get('stream_data', '{}')
+        stream_data = live_room['liveRoom']['streamData']['pull_data']['stream_data']
         stream_data = json.loads(stream_data).get('data', {})
 
         quality_list: list = list(stream_data.keys())  # ["origin","uhd","sd","ld"]
@@ -538,55 +538,60 @@ def get_bilibili_stream_url(json_data: dict, video_quality: str) -> dict:
     if "is_live" in json_data and not json_data['anchor_name']:
         return json_data
 
-    anchor_name = json_data.get('roomInfoRes', {}).get('data', {}).get('anchor_info', {}).get('base_info', {}).get(
-        'uname', '')
-    playurl_info = json_data['roomInitRes']['data']['playurl_info']
+    anchor_name = json_data['anchor_name']
+    playurl_info = json_data['stream_data']['playurl_info']
     result = {
         "anchor_name": anchor_name,
         "is_live": False,
     }
     if playurl_info:
-        def get_url(m, n):
-            format_list = ['.flv', '.m3u8']
-            # 字典中的键就是qn，其中qn=30000为杜比 20000为4K 10000为原画 400蓝光 250超清 150高清，qn=0是默认画质
-            quality_list = {'10000': '', '400': '_4000', '250': '_2500', '150': '_1500'}
-
-            stream_data = playurl_info['playurl']['stream'][m]['format'][0]['codec'][0]
-            accept_qn_list = stream_data['accept_qn']
-            while len(accept_qn_list) < 4:
-                accept_qn_list.append(accept_qn_list[-1])
-            base_url = stream_data['base_url']
-            current_qn = stream_data['current_qn']
-            host = stream_data['url_info'][0]['host']
-            extra = stream_data['url_info'][0]['extra']
-            url_type = format_list[m]
-            qn = str(accept_qn_list[n])
-            select_quality = quality_list[qn]
-
-            if current_qn != 10000:
-                base_url = re.sub(r'_(\d+)' + f'(?={url_type}\\?)', select_quality, base_url)
-
-            extra = re.sub('&qn=0', f'&qn={qn}', extra)
-            return host + base_url + extra
-
-        if video_quality == "原画" or video_quality == "蓝光":
-            flv_url = get_url(0, 0)
-            m3u8_url = get_url(1, 0)
-        elif video_quality == "超清":
-            flv_url = get_url(0, 1)
-            m3u8_url = get_url(1, 1)
-        elif video_quality == "高清":
-            flv_url = get_url(0, 2)
-            m3u8_url = get_url(1, 2)
-        elif video_quality == "标清":
-            flv_url = get_url(0, 3)
-            m3u8_url = get_url(1, 3)
+        # 其中qn=30000为杜比 20000为4K 10000为原画 400蓝光 250超清 150高清 80流畅
+        quality_list = {'10000': 'bluray', '400': '4000', '250': '2500', '150': '1500', '80':'800'}
+        format_list = playurl_info['playurl']['stream'][1]['format']
+        current_qn = format_list[0]['codec'][0]['current_qn']
+        if int(current_qn) != 10000:
+            stream_data = format_list[1]['codec'][0]
         else:
-            flv_url = get_url(0, 0)
-            m3u8_url = get_url(1, 0)
+            stream_data = format_list[0]['codec'][0]
+        accept_qn_list = stream_data['accept_qn']
+        qn_count = len(accept_qn_list)
+        if 10000 not in accept_qn_list:
+            new_accept_qn_list = [10000]+accept_qn_list
+        else:
+            new_accept_qn_list = [i for i in accept_qn_list]
+        while len(new_accept_qn_list) < 5:
+            new_accept_qn_list.append(new_accept_qn_list[-1])
 
-        result['flv_url'] = flv_url
-        result['m3u8_url'] = m3u8_url
+        video_quality_options = {
+            "原画": 0,
+            "蓝光": 1,
+            "超清": 2,
+            "高清": 3,
+            "标清": 4,
+            "流畅": 4
+        }
+        select_quality = new_accept_qn_list[video_quality_options[video_quality]]
+        select_quality = quality_list[str(select_quality)]
+        base_url = stream_data['base_url']
+        host = stream_data['url_info'][0]['host']
+        extra = stream_data['url_info'][0]['extra']
+
+        if int(current_qn) != 10000 and qn_count > 1:
+            if (qn_count == 2 and 10000 not in accept_qn_list) or qn_count > 2:
+                live_key = base_url.split('/')[3]
+                live_key_list = live_key.split('_')
+                if len(live_key_list) == 4:
+                    live_key_list[3] = select_quality
+                else:
+                    live_key_list.append(select_quality)
+
+                new_live_key = '_'.join(live_key_list)
+                base_url = re.sub(live_key, new_live_key, base_url)
+                extra = re.sub(live_key, new_live_key, extra)
+                time_at = int(time.time()) + 10800
+                extra = re.sub(r"expires=[0-9]+&len=", f"expires={time_at}&len=", extra)
+
+        m3u8_url = host + base_url + extra
         result['is_live'] = True
         result['record_url'] = m3u8_url  # B站使用m3u8链接进行录制
     return result
@@ -993,21 +998,23 @@ def start_record(url_data: tuple, count_variable: int = -1):
                             print(f"\r{record_name} 等待直播... ")
 
                             if start_pushed:
-                                content = f"{record_name} 直播已结束！"
-                                push_pts = push_message(content)
-                                if push_pts:
-                                    print(f'提示信息：已经将[{record_name}]直播状态消息推送至你的{push_pts}')
-                                    start_pushed = False
+                                if over_show_push:
+                                    content = f"{record_name} 直播已结束！"
+                                    push_pts = push_message(content)
+                                    if push_pts:
+                                        print(f'提示信息：已经将[{record_name}]直播状态消息推送至你的{push_pts}')
+                                start_pushed = False
                         else:
                             content = f"\r{record_name} 正在直播中..."
                             print(content)
 
                             # 推送通知
                             if live_status_push and not start_pushed:
-                                push_pts = push_message(f"{content.split('...')[0]}，时间：{datetime.datetime.today()}")
-                                if push_pts:
-                                    print(f'提示信息：已经将[{record_name}]直播状态消息推送至你的{push_pts}')
-                                    start_pushed = True
+                                if begin_show_push:
+                                    push_pts = push_message(f"{content.split('...')[0]}，时间：{datetime.datetime.today()}")
+                                    if push_pts:
+                                        print(f'提示信息：已经将[{record_name}]直播状态消息推送至你的{push_pts}')
+                                start_pushed = True
 
                             if disable_record:
                                 time.sleep(push_check_seconds)
@@ -1100,7 +1107,7 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                         if flv_url:
                                             _filepath, _ = urllib.request.urlretrieve(real_url,
                                                                                       full_path + '/' + filename)
-
+                                            record_finished = True
                                         else:
                                             raise Exception('该直播无flv直播流，请切换视频保存类型')
 
@@ -1150,7 +1157,7 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                         ffmpeg_command.extend(command)
 
                                         _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
-
+                                        record_finished = True
                                     except subprocess.CalledProcessError as e:
                                         logger.warning(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                                         warning_count += 1
@@ -1194,51 +1201,108 @@ def start_record(url_data: tuple, count_variable: int = -1):
 
                                         ffmpeg_command.extend(command)
                                         _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
-
+                                        record_finished = True
                                     except subprocess.CalledProcessError as e:
                                         logger.warning(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                                         warning_count += 1
                                         no_error = False
 
                                 elif video_save_type == "MKV音频":
-                                    filename = anchor_name + '_' + now + ".mkv"
-                                    print(f'{rec_info}/{filename}')
-                                    save_file_path = full_path + '/' + filename
-
                                     try:
-                                        command = [
-                                            "-map", "0:a",
-                                            "-c:a", "copy",
-                                            "-f", "matroska",
-                                            "{path}".format(path=save_file_path),
-                                        ]
-                                        ffmpeg_command.extend(command)
-                                        _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
+                                        if split_video_by_time:
+                                            now = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+                                            filename = anchor_name + '_' + now + ".mkv"
+                                            print(f'{rec_info}/{filename}')
 
-                                        if ts_to_m4a:
-                                            threading.Thread(target=converts_m4a, args=(save_file_path,)).start()
+                                            if ts_to_mp3:
+                                                save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.mp3"
+                                            else:
+                                                save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.mkv"
+
+                                            command = [
+                                                "-map", "0:a",
+                                                "-c:a", 'copy',
+                                                "-f", "segment",
+                                                "-segment_time", split_time,
+                                                "-segment_format", 'mpegts',
+                                                "-reset_timestamps", "1",
+                                                save_path_name,
+                                            ]
+                                            ffmpeg_command.extend(command)
+                                            _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
+                                            record_finished = True
+
+                                        else:
+                                            filename = anchor_name + '_' + now + ".mkv"
+                                            print(f'{rec_info}/{filename}')
+                                            save_file_path = full_path + '/' + filename
+
+                                            command = [
+                                                "-map", "0:a",
+                                                "-c:a", "copy",
+                                                "-f", "segment",
+                                                "-segment_time", split_time,
+                                                "-segment_format", "matroska",
+                                                "-reset_timestamps", "1",
+                                                save_file_path,
+                                            ]
+
+                                            ffmpeg_command.extend(command)
+                                            _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
+                                            record_finished = True
+
+                                            if ts_to_m4a:
+                                                threading.Thread(target=converts_m4a, args=(save_file_path,)).start()
+
                                     except subprocess.CalledProcessError as e:
                                         logger.warning(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                                         warning_count += 1
                                         no_error = False
 
                                 elif video_save_type == "TS音频":
-                                    filename = anchor_name + '_' + now + ".ts"
-                                    print(f'{rec_info}/{filename}')
-                                    save_file_path = full_path + '/' + filename
-
                                     try:
-                                        command = [
-                                            "-map", "0:a",
-                                            "-c:a", "copy",
-                                            "-f", "mpegts",
-                                            "{path}".format(path=save_file_path),
-                                        ]
-                                        ffmpeg_command.extend(command)
-                                        _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
+                                        if split_video_by_time:
+                                            now = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+                                            filename = anchor_name + '_' + now + ".ts"
+                                            print(f'{rec_info}/{filename}')
 
-                                        if ts_to_m4a:
-                                            threading.Thread(target=converts_m4a, args=(save_file_path,)).start()
+                                            if ts_to_mp3:
+                                                save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.mp3"
+                                            else:
+                                                save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.ts"
+
+                                            command = [
+                                                "-map", "0:a",
+                                                "-c:a", 'copy',
+                                                "-f", "segment",
+                                                "-segment_time", split_time,
+                                                "-segment_format", 'mpegts',
+                                                "-reset_timestamps", "1",
+                                                save_path_name,
+                                            ]
+                                            ffmpeg_command.extend(command)
+                                            _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
+                                            record_finished = True
+
+                                        else:
+                                            filename = anchor_name + '_' + now + ".ts"
+                                            print(f'{rec_info}/{filename}')
+                                            save_file_path = full_path + '/' + filename
+
+                                            command = [
+                                                "-map", "0:a",
+                                                "-c:a", "copy",
+                                                "-f", "mpegts",
+                                                "{path}".format(path=save_file_path),
+                                            ]
+
+                                            ffmpeg_command.extend(command)
+                                            _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
+                                            record_finished = True
+
+                                            if ts_to_m4a:
+                                                threading.Thread(target=converts_m4a, args=(save_file_path,)).start()
+
                                     except subprocess.CalledProcessError as e:
                                         logger.warning(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                                         warning_count += 1
@@ -1253,16 +1317,14 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                         try:
                                             if ts_to_mp4:
                                                 save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.mp4"
-                                                audio_code = 'aac'
                                                 segment_format = 'mp4'
                                             else:
                                                 save_path_name = f"{full_path}/{anchor_name}_{now}_%03d.ts"
-                                                audio_code = 'copy'
                                                 segment_format = 'mpegts'
 
                                             command = [
                                                 "-c:v", "copy",
-                                                "-c:a", audio_code,
+                                                "-c:a", 'copy',
                                                 "-map", "0",
                                                 "-f", "segment",
                                                 "-segment_time", split_time,
@@ -1274,6 +1336,7 @@ def start_record(url_data: tuple, count_variable: int = -1):
                                             ffmpeg_command.extend(command)
                                             _output = subprocess.check_output(ffmpeg_command,
                                                                               stderr=subprocess.STDOUT)
+                                            record_finished = True
 
                                         except subprocess.CalledProcessError as e:
                                             logger.warning(
@@ -1305,18 +1368,17 @@ def start_record(url_data: tuple, count_variable: int = -1):
 
                                             ffmpeg_command.extend(command)
                                             _output = subprocess.check_output(ffmpeg_command, stderr=subprocess.STDOUT)
+                                            record_finished = True
 
                                             if ts_to_mp4:
                                                 threading.Thread(target=converts_mp4, args=(save_file_path,)).start()
                                             if ts_to_m4a:
                                                 threading.Thread(target=converts_m4a, args=(save_file_path,)).start()
-
                                         except subprocess.CalledProcessError as e:
                                             logger.warning(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                                             warning_count += 1
                                             no_error = False
 
-                                record_finished = True
                                 record_finished_2 = True
                                 count_time = time.time()
 
@@ -1334,16 +1396,6 @@ def start_record(url_data: tuple, count_variable: int = -1):
 
                                 record_finished_2 = False
 
-                                # 推送通知
-                                content = f"{record_name} 直播已结束"
-                                if not live_status_push:
-                                    if '微信' in live_status_push:
-                                        xizhi(xizhi_api_url, content)
-                                    if '钉钉' in live_status_push:
-                                        dingtalk(dingtalk_api_url, content, dingtalk_phone_num)
-                                    if 'TG' in live_status_push:
-                                        tg_bot(tg_chat_id, tg_token, content)
-
                 except Exception as e:
                     logger.warning(f"错误信息: {e} 发生错误的行数: {e.__traceback__.tb_lineno}")
                     warning_count += 1
@@ -1354,7 +1406,7 @@ def start_record(url_data: tuple, count_variable: int = -1):
                 x = num
 
                 # 如果出错太多,就加秒数
-                if warning_count > 100:
+                if warning_count > 20:
                     x = x + 60
                     print("瞬时错误太多,延迟加60秒")
 
@@ -1551,6 +1603,8 @@ while True:
                             False)
     ts_to_m4a = options.get(read_config_value(config, '录制设置', 'ts录制完成后自动增加生成m4a格式', "否"),
                             False)
+    ts_to_mp3 = options.get(read_config_value(config, '录制设置', '音频录制完成后自动转为mp3格式', "否"),
+                            False)
     delete_origin_file = options.get(read_config_value(config, '录制设置', '追加格式后删除原文件', "否"), False)
     create_time_file = options.get(read_config_value(config, '录制设置', '生成时间文件', "否"), False)
     enable_proxy_platform = read_config_value(config, '录制设置', '使用代理录制的平台（逗号分隔）',
@@ -1566,6 +1620,8 @@ while True:
     tg_chat_id = read_config_value(config, '推送配置', 'tg聊天id(个人或者群组id)', "")
     disable_record = options.get(read_config_value(config, '推送配置', '只推送通知不录制（是/否）', "否"), False)
     push_check_seconds = int(read_config_value(config, '推送配置', '直播推送检测频率（秒）', 1800))
+    begin_show_push = options.get(read_config_value(config, '推送配置', '开播推送开启（是/否）', "是"), True)
+    over_show_push = options.get(read_config_value(config, '推送配置', '关播推送开启（是/否）', "否"), False)
     afreecatv_username = read_config_value(config, '账号密码', 'afreecatv账号', '')
     afreecatv_password = read_config_value(config, '账号密码', 'afreecatv密码', '')
     flextv_username = read_config_value(config, '账号密码', 'flextv账号', '')
