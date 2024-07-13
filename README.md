@@ -40,6 +40,11 @@
 - [x] TwitchTV
 - [x] LiveMe
 - [x] 花椒直播
+- [x] 流星直播
+- [x] ShowRoom
+- [x] Acfun
+- [x] 时光直播
+- [x] 映客直播
 - [ ] 更多平台正在更新中
 
 </div>
@@ -85,7 +90,7 @@
 
 - 如果要长时间挂着软件循环监测直播，最好循环时间设置长一点（咱也不差没录制到的那几分钟），避免因请求频繁导致被官方封禁IP 。
 
-- 要停止直播录制，使用`Ctrl+C ` 或直接关闭程序即可。
+- 要停止直播录制，使用 `Ctrl+C ` 或直接关闭程序即可。
 - 最后，欢迎右上角给本项目一个star，同时也非常乐意大家提交pr。
 
 &emsp;
@@ -96,6 +101,7 @@
 抖音：
 https://live.douyin.com/745964462470
 https://v.douyin.com/iQFeBnt/
+https://live.douyin.com/yall1102
 
 TikTok：
 https://www.tiktok.com/@pearlgaga88/live
@@ -117,6 +123,7 @@ B站：
 https://live.bilibili.com/320
 
 小红书：
+http://xhslink.com/xpJpfM
 https://www.xiaohongshu.com/hina/livestream/569077534207413574/1707413727088?appuid=5f3f478a00000000010005b3&
 
 bigo直播：
@@ -160,6 +167,7 @@ https://twitcasting.tv/c:uonq
 https://live.baidu.com/m/media/pclive/pchome/live.html?room_id=9175031377&tab_category
 
 微博直播:
+https://weibo.com/u/7676267963 （主页地址）
 https://weibo.com/l/wblive/p/show/1022:2321325026370190442592
 
 酷狗直播:
@@ -172,20 +180,29 @@ LiveMe:
 https://www.liveme.com/zh/v/17141543493018047815/index.html
 
 花椒直播:
-https://www.huajiao.com/user/223184650
+https://www.huajiao.com/user/223184650  （主页地址）
+
+流星直播:
+https://www.7u66.com/100960
+
+ShowRoom:
+https://www.showroom-live.com/room/profile?room_id=480206  （主页地址）
+
+Acfun:
+https://live.acfun.cn/live/179922
+
+时光直播：
+https://www.rengzu.com/180778
+
+映客直播：
+https://www.inke.cn/liveroom/index.html?uid=22954469&id=1720860391070904
 ```
 
 直播间分享地址和网页端长地址都能正常进行录制（抖音尽量用长链接，避免因短链接转换失效导致不能正常录制，而且需要有nodejs环境，否则无法转换）。
 
 &emsp;
 
-解析接口：
-
-该解析接口 ~~仅供演示~~(演示接口暂时停止，后续再开放)，并且只包含抖音、快手、虎牙直播的解析，其他平台如有需要请自行添加，源码在这里 [DouyinLiveRecorder/api](https://github.com/ihmily/DouyinLiveRecorder/tree/main/api)
-
-
-
-在线播放m3u8和flv视频网站：[M3U8 在线视频播放器 ](https://jx.hmily.vip/play/)，源码是 [index.html](https://github.com/ihmily/DouyinLiveRecorder/blob/main/index.html)
+在线播放m3u8和flv视频网站：[M3U8 在线视频播放器 ](https://jx.hmily.vip/play/)
 
 &emsp;
 
@@ -254,7 +271,7 @@ python main.py
 docker-compose up
 ```
 
-可选 `-d` 在后台运行。第一次运行之后都可用 `docker-compose start`  启动已创建的容器。
+可选 `-d` 在后台运行。
 
 
 
@@ -301,31 +318,59 @@ docker-compose stop
 [![wwkk2580](https://github.com/wwkk2580.png?size=50)](https://github.com/wwkk2580)
 [![missuo](https://github.com/missuo.png?size=50)](https://github.com/missuo)
 <a href="https://github.com/xueli12" target="_blank"><img src="https://github.com/xueli12.png?size=50" alt="xueli12" style="width:53px; height:51px;" /></a>
+<a href="https://github.com/kaine1973" target="_blank"><img src="https://github.com/kaine1973.png?size=50" alt="kaine1973" style="width:53px; height:51px;" /></a>
+<a href="https://github.com/Max-Tortoise" target="_blank"><img src="https://github.com/Max-Tortoise.png?size=50" alt="Max-Tortoise" style="width:53px; height:51px;" /></a>
 &emsp;
 
 ## ⏳提交日志
 
+- 20240713
+  - 新增映客直播录制
+  
+- 20240705
+  - 新增时光直播录制
+
+- 20240701
+  - 修复虎牙直播录制2分钟断流问题
+
+  - 新增自定义直播推送内容
+
+- 20240621
+  - 新增Acfun、ShowRoom直播录制
+  - 修复微博录制、新增直播源线路
+  - 修复斗鱼直播60帧录制
+  - 修复酷狗直播录制
+  - 修复TikTok部分无法解析直播源
+  - 修复抖音无法录制连麦直播
+
+- 20240510
+  - 修复部分虎牙直播间录制错误
+- 20240508
+  - 修复花椒直播录制
+
+  - 更改文件路径解析方式 [@kaine1973](https://github.com/kaine1973)
+- 20240506
+  - 修复抖音录制画质解析bug
+
+  - 修复虎牙录制 60帧最高画质问题
+
+  - 新增流星直播录制
 - 20240427
   - 新增LiveMe、花椒直播录制
-  
 - 20240425
   - 新增TwitchTV直播录制
-
 - 20240424
   - 新增酷狗直播录制、优化PopkonTV直播录制
-
 - 20240423
   - 新增百度直播录制、微博直播录制
 
   - 修复斗鱼录制直播回放的问题
 
   - 新增直播源地址显示以及输出到日志文件设置
-
 - 20240311
   - 修复海外平台录制bug，增加画质选择，增强录制稳定性
 
   - 修复虎牙录制bug (虎牙`一起看`频道 有特殊限制，有时无法录制)
-
 - 20240309
   - 修复虎牙直播、小红书直播和B站直播录制
   - 新增5个直播平台录制，包括winktv、flextv、look、popkontv、twitcasting
@@ -333,7 +378,6 @@ docker-compose stop
   - 新增自定义配置需要使用代理录制的平台
   - 新增只推送开播消息不进行录制设置
   - 修复了一些bug
-
 - 20240209
   - 优化AfreecaTV录制，新增账号密码登录获取cookie以及持久保存
   - 修复了小红书直播因官方更新直播域名，导致无法录制直播的问题
@@ -365,9 +409,8 @@ docker-compose stop
   - 新增AfreecaTV直播录制，修复某些可能会发生的bug
 
 - 20231207
-
   - 新增blued直播录制，修复YY直播录制，新增直播结束消息推送
-
+  
 - 20231206
   - 新增bigo直播录制
 
