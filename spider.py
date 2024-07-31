@@ -4,7 +4,7 @@
 Author: Hmily
 GitHub: https://github.com/ihmily
 Date: 2023-07-15 23:15:00
-Update: 2024-07-05 12:33:00
+Update: 2024-07-22 00:03:00
 Copyright (c) 2023 by Hmily, All Rights Reserved.
 Function: Get live stream data.
 """
@@ -196,11 +196,16 @@ def get_douyin_app_stream_data(url: str, proxy_addr: Union[str, None] = None, co
 
         if 'stream_url' not in room_data:
             raise RuntimeError('该直播类型或玩法电脑端暂未支持，请使用app端分享链接进行录制')
-        live_core_sdk_data = room_data['stream_url']['live_core_sdk_data']
 
         if room_data['status'] == 2:
+            live_core_sdk_data = room_data['stream_url']['live_core_sdk_data']
+            pull_datas = room_data['stream_url']['pull_datas']
             if live_core_sdk_data:
-                json_str = live_core_sdk_data['pull_data']['stream_data']
+                if pull_datas:
+                    key = list(pull_datas.keys())[0]
+                    json_str = pull_datas[key]['stream_data']
+                else:
+                    json_str = live_core_sdk_data['pull_data']['stream_data']
                 json_data = json.loads(json_str)
                 if 'origin' in json_data['data']:
                     origin_url_list = json_data['data']['origin']['main']
@@ -244,15 +249,16 @@ def get_douyin_stream_data(url: str, proxy_addr: Union[str, None] = None, cookie
         if 'status' in json_data and json_data['status'] == 4:
             return json_data
 
-        match_json_str2 = re.search(r'"(\{\\"common\\":.*?)"]\)</script><script nonce=', html_str)
+        match_json_str2 = re.findall(r'"(\{\\"common\\":.*?)"]\)</script><script nonce=', html_str)
         if match_json_str2:
-            json_str = match_json_str2.group(1).replace('\\', '').replace('"{', '{').replace('}"', '}').replace('u0026', '&')
-            json_data2 = json.loads(json_str)
+            json_str = match_json_str2[1] if len(match_json_str2) > 1 else match_json_str2[0]
+            json_data2 = json.loads(json_str.replace('\\', '').replace('"{', '{').replace('}"', '}').replace('u0026', '&'))
             if 'origin' in json_data2['data']:
                 origin_url_list = json_data2['data']['origin']['main']
 
         else:
-            match_json_str3 = re.search('"origin":\{"main":(.*?),"dash"',html_str.replace('\\', '').replace('u0026', '&'), re.S)
+            html_str = html_str.replace('\\', '').replace('u0026', '&')
+            match_json_str3 = re.search('"origin":\{"main":(.*?),"dash"', html_str, re.S)
             if match_json_str3:
                 origin_url_list = json.loads(match_json_str3.group(1) + '}')
 
@@ -580,7 +586,7 @@ def get_yy_stream_data(url: str, proxy_addr: Union[str, None] = None, cookies: U
 
 
 @trace_error_decorator
-def get_bilibili_stream_data(url: str, proxy_addr: Union[str, None] = None, cookies: Union[str, None] = None) -> \
+def get_bilibili_room_info(url: str, proxy_addr: Union[str, None] = None, cookies: Union[str, None] = None) -> \
         Dict[str, Any]:
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
@@ -590,28 +596,48 @@ def get_bilibili_stream_data(url: str, proxy_addr: Union[str, None] = None, cook
     if cookies:
         headers['Cookie'] = cookies
 
-    def get_data_from_api(link: str) -> Dict[str, Any]:
-        room_id = link.split('?')[0].rsplit('/', maxsplit=1)[1]
-        api = f'https://api.live.bilibili.com/xlive/web-room/v2/index/getRoomPlayInfo?room_id={room_id}&no_playurl=0&mask=1&qn=0&platform=web&protocol=0,1&format=0,1,2&codec=0,1,2&dolby=5&panorama=1'
-        json_str = get_req(url=api, proxy_addr=proxy_addr, headers=headers)
-        return json.loads(json_str)
-
     try:
-        html_str = get_req(url=url, proxy_addr=proxy_addr, headers=headers)
-        json_str = re.search('<script>window.__NEPTUNE_IS_MY_WAIFU__=(.*?)</script><script>', html_str, re.S)
-        if json_str:
-            json_str = json_str.group(1)
-            json_data = json.loads(json_str)
-            json_data['anchor_name'] = json_data['roomInfoRes']['data']['anchor_info']['base_info']['uname']
-            json_data['stream_data'] = json_data['roomInitRes']['data']
-        else:
-            json_data = get_data_from_api(url)
-            json_data['anchor_name'] = f"房间号{json_data['data']['room_id']}的直播"
-            json_data['stream_data'] = json_data['data']
-        return json_data
+        room_id = url.split('?')[0].rsplit('/', maxsplit=1)[1]
+        json_str = get_req(f'https://api.live.bilibili.com/room/v1/Room/room_init?id={room_id}',
+                           proxy_addr=proxy_addr,headers=headers)
+        room_info = json.loads(json_str)
+        uid = room_info['data']['uid']
+        live_status = True if room_info['data']['live_status'] == 1 else False
+
+        api = f'https://api.live.bilibili.com/live_user/v1/Master/info?uid={uid}'
+        json_str2 = get_req(url=api, proxy_addr=proxy_addr, headers=headers)
+        anchor_info = json.loads(json_str2)
+        anchor_name = anchor_info['data']['info']['uname']
+        return {"anchor_name": anchor_name, "live_status": live_status, "room_url":url}
     except Exception as e:
         print(e)
-        return {"anchor_name": '', "is_live": False}
+        return {"anchor_name": '', "live_status": False, "room_url":url}
+
+
+@trace_error_decorator
+def get_bilibili_stream_data(url: str, qn: str = '10000', platform: str = 'web', proxy_addr: Union[str, None] = None,
+                             cookies: Union[str, None] = None) -> str:
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:127.0) Gecko/20100101 Firefox/127.0',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'zh-CN,zh;q=0.8,zh-TW;q=0.7,zh-HK;q=0.5,en-US;q=0.3,en;q=0.2',
+    }
+    if cookies:
+        headers['Cookie'] = cookies
+
+    room_id = url.split('?')[0].rsplit('/', maxsplit=1)[1]
+    params = {
+        'cid': room_id,
+        'qn': qn,
+        'platform': platform,
+    }
+    play_api = f'https://api.live.bilibili.com/room/v1/Room/playUrl?{urllib.parse.urlencode(params)}'
+    json_str = get_req(play_api, proxy_addr=proxy_addr, headers=headers)
+    json_data = json.loads(json_str)
+    for i in json_data['data']['durl']:
+        if 'd1--cn-gotcha' in i['url']:
+            return i['url']
+    return json_data['data']['durl'][-1]['url']
 
 
 @trace_error_decorator
@@ -664,7 +690,15 @@ def get_bigo_stream_url(url: str, proxy_addr: Union[str, None] = None, cookies: 
     if cookies:
         headers['Cookie'] = cookies
 
-    room_id = re.search('www.bigo.tv/cn/(\w+)', url).group(1)
+    if 'bigo.tv' not in url:
+        html_str = get_req(url, proxy_addr=proxy_addr, headers=headers)
+        web_url = re.search(
+            '<meta data-n-head="ssr" data-hid="al:web:url" property="al:web:url" content="(.*?)">',
+            html_str).group(1)
+        room_id = re.search('&h=(\d+)(?=$|&)', web_url.replace('&amp;', '&')).group(1)
+    else:
+        room_id = re.search('www.bigo.tv/cn/(\w+)', url).group(1)
+
     data = {'siteId': room_id}  # roomId
     url2 = 'https://ta.bigo.tv/official_website/studio/getInternalStudioInfo'
     json_str = get_req(url=url2, proxy_addr=proxy_addr, headers=headers, data=data)
@@ -682,8 +716,8 @@ def get_bigo_stream_url(url: str, proxy_addr: Union[str, None] = None, cookies: 
         result['is_live'] = True
         result['record_url'] = m3u8_url
     elif result['anchor_name'] == '':
-        html_str = get_req(url=url, proxy_addr=proxy_addr, headers=headers)
-        result['anchor_name'] = re.search('<title>(.*?)</title>', html_str, re.S).group(1)
+        html_str = get_req(url=f'https://www.bigo.tv/cn/{room_id}', proxy_addr=proxy_addr, headers=headers)
+        result['anchor_name'] = re.search('<title>欢迎来到(.*?)的直播间</title>', html_str, re.S).group(1)
 
     return result
 
@@ -2328,6 +2362,7 @@ if __name__ == '__main__':
     # room_url = 'https://www.redelight.cn/hina/livestream/569077534207413574?appuid=5f3f478a00000000010005b3&'
     # room_url = 'https://www.xiaohongshu.com/hina/livestream/569098486282043893?appuid=5f3f478a00000000010005b3&'
     # room_url = 'https://www.bigo.tv/cn/716418802'  # bigo直播
+    # room_url = 'https://slink.bigovideo.tv/uPvCVq'  # bigo直播
     # room_url = 'https://app.blued.cn/live?id=Mp6G2R'  # blued直播
     # room_url = 'https://play.afreecatv.com/sw7love'  # afreecatv直播
     # room_url = 'https://m.afreecatv.com/#/player/hl6260'  # afreecatv直播
